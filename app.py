@@ -20,24 +20,35 @@ if uploaded_file and st.button("بدء المعالجة واستخراج الم�
         with open(input_path, "wb") as f:
             f.write(uploaded_file.getbuffer())
 
-        if uploaded_file.name.endswith(".zip"):
-            gdf = gpd.read_file(f"zip://{input_path}")
+        if uploaded_file.name.lower().endswith(".zip"):
+            # فك ضغط الملف أولاً لتفادي خطأ القراءة المباشرة
+            extract_dir = os.path.join(tmpdir, "extracted")
+            os.makedirs(extract_dir, exist_ok=True)
+            with zipfile.ZipFile(input_path, 'r') as zip_ref:
+                zip_ref.extractall(extract_dir)
+            
+            # قراءة مجلد Shapefile المفكوك
+            gdf = gpd.read_file(extract_dir)
         else:
             gdf = gpd.read_file(input_path)
 
+        # تحويل نظام الإحداثيات واستخراج X و Y
         gdf = gdf.to_crs(epsg=4326)
         gdf['X'] = gdf.geometry.x
         gdf['Y'] = gdf.geometry.y
 
+        # حذف التكرارات بناءً على الإحداثيات
         gdf = gdf.drop_duplicates(subset=['X', 'Y'])
 
         out_dir = os.path.join(tmpdir, "output")
         os.makedirs(out_dir, exist_ok=True)
 
+        # 1. إنشاء ملف إكسيل
         excel_path = os.path.join(out_dir, "excel.xlsx")
         df = pd.DataFrame(gdf.drop(columns='geometry'))
         df.to_excel(excel_path, index=False)
 
+        # 2. إنشاء ملف النص
         txt_path = os.path.join(out_dir, "info.txt")
         with open(txt_path, "w", encoding="utf-8") as f:
             f.write(f"الاسم: {name}\n")
@@ -45,9 +56,11 @@ if uploaded_file and st.button("بدء المعالجة واستخراج الم�
             f.write(f"رقم الطلب: {order_no}\n")
             f.write(f"عدد النقاط المعالجة: {len(gdf)}\n")
 
+        # 3. حفظ طبقة Shapefile المعدلة
         shp_dir = os.path.join(out_dir, "point_layers")
         gdf.to_file(shp_dir, driver="ESRI Shapefile")
 
+        # ضغط المخرجات
         zip_output_path = os.path.join(tmpdir, "final_package.zip")
         shutil.make_archive(zip_output_path.replace('.zip', ''), 'zip', out_dir)
 

@@ -21,14 +21,24 @@ if uploaded_file and st.button("بدء المعالجة واستخراج الم�
             f.write(uploaded_file.getbuffer())
 
         if uploaded_file.name.lower().endswith(".zip"):
-            # فك ضغط الملف أولاً لتفادي خطأ القراءة المباشرة
             extract_dir = os.path.join(tmpdir, "extracted")
             os.makedirs(extract_dir, exist_ok=True)
             with zipfile.ZipFile(input_path, 'r') as zip_ref:
                 zip_ref.extractall(extract_dir)
             
-            # قراءة مجلد Shapefile المفكوك
-            gdf = gpd.read_file(extract_dir)
+            # البحث عن أي ملف ينتهي بـ .shp داخل المجلد بجميع مستوياته
+            shp_files = []
+            for root, dirs, files in os.walk(extract_dir):
+                for file in files:
+                    if file.lower().endswith('.shp'):
+                        shp_files.append(os.path.join(root, file))
+            
+            if not shp_files:
+                st.error("لم يتم العثور على أي ملف Shapefile (.shp) داخل الملف المضغوط!")
+                st.stop()
+            
+            # قراءة أول ملف shapefile يتم العثور عليه
+            gdf = gpd.read_file(shp_files[0])
         else:
             gdf = gpd.read_file(input_path)
 
